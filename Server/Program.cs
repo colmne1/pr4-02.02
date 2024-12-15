@@ -1,64 +1,72 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net;
-using System.Text;
-using System.Threading.Tasks;
-using System.Net;
-using System.IO;
-using Common;
+﻿using Common;
+using MySql.Data.MySqlClient;
 using Newtonsoft.Json;
+using System;
+using System.Collections.Generic;
+using System.Data.SqlClient;
+using System.IO;
+using System.Net;
 using System.Net.Sockets;
-using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Server
 {
     public class Program
     {
         public static List<User> Users = new List<User>();
-        public static IPAddress IAddress;
+        public static IPAddress IpAddress;
         public static int Port;
-        static void Main(string[] args)
+        private static string connectionString = "Server=localhost;port=3307;Database=ftp_data;uid=root;pwd=;";
+        public static bool AuthenticateUser(string login, string password)
         {
-            LoadUsersFromDatabase();
-            Console.Write("Введите IP адрес сервера: ");
-            string sIdAddress = Console.ReadLine();
-            Console.WriteLine("Введите порт: ");
-            string sPort = Console.ReadLine();
-            if (int.TryParse(sPort, out Port) && IPAddress.TryParse(sIdAddress, out IpAddress))
+            using (MySqlConnection conn = new MySqlConnection(connectionString))
             {
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine("Данные успешно введены. Запускаю сервер.");
-                StartServer();
+                conn.Open();
+                string query = "SELECT COUNT(*) FROM history WHERE username = @login AND password = @password";
+                using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("@login", login);
+                    cmd.Parameters.AddWithValue("@password", password);
+                    int count = Convert.ToInt32(cmd.ExecuteScalar());
+                    return count > 0;
+                }
             }
-            Console.Read();
         }
-        public static bool AutorizationUser(string login, string password)
+
+        public static bool AutorizationUser(string login, string password, out int userId)
         {
-            User user = null;
-            user = Users.Find(x => x.login == login && x.password == password);
-            return user != null;
+            userId = -1;
+            User user = Users.Find(x => x.login == login && x.password == password);
+            if (user != null)
+            {
+                userId = user.id;
+                return true;
+            }
+            return false;
         }
+
         public static List<string> GetDirectory(string src)
         {
-            List<string> FolderFiles = new List<string>();
+            List<string> FoldersFiles = new List<string>();
             if (Directory.Exists(src))
             {
                 string[] dirs = Directory.GetDirectories(src);
                 foreach (string dir in dirs)
                 {
                     string NameDirectory = dir.Replace(src, "");
-                    FolderFiles.Add(NameDirectory + "/");
+                    FoldersFiles.Add(NameDirectory + "/");
                 }
                 string[] files = Directory.GetFiles(src);
                 foreach (string file in files)
                 {
                     string NameFile = file.Replace(src, "");
-                    FolderFiles.Add(NameFile);
+                    FoldersFiles.Add(NameFile);
                 }
             }
-            return FolderFiles;
+
+            return FoldersFiles;
         }
+
         public static void StartServer()
         {
             IPEndPoint endPoint = new IPEndPoint(IpAddress, Port);
@@ -204,6 +212,63 @@ namespace Server
                     }
                 }
             }
+        }
+
+        private static void LogCommandToDatabase(string username, string password, string command)
+        {
+            string connectionString = "Server=localhost;port=3307;Database=ftp_data;uid=root;pwd=;";
+
+            using (MySqlConnection conn = new MySqlConnection(connectionString))
+            {
+                conn.Open();
+                string query = "INSERT INTO history (username, password, command, sendDate) VALUES (@username, @password, @command, @sendDate)";
+                using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("@username", username);
+                    cmd.Parameters.AddWithValue("@password", password);
+                    cmd.Parameters.AddWithValue("@command", command);
+                    cmd.Parameters.AddWithValue("@sendDate", DateTime.Now);
+                    cmd.ExecuteNonQuery();
+                }
+            }
+        }
+
+        private static void LoadUsersFromDatabase()
+        {
+            using (MySqlConnection conn = new MySqlConnection(connectionString))
+            {
+                conn.Open();
+                string query = "SELECT id, username, password FROM history";
+                using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                {
+                    using (MySqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            int id = reader.GetInt32("id");
+                            string login = reader["username"].ToString();
+                            string password = reader["password"].ToString();
+                            Users.Add(new User(id, login, password, $@"C:\"));
+                        }
+                    }
+                }
+            }
+        }
+
+        static void Main(string[] args)
+        {
+            LoadUsersFromDatabase();
+            Console.Write("Введите IP адрес сервера: ");
+            string sIdAddress = Console.ReadLine();
+            Console.WriteLine("Введите порт: ");
+            string sPort = Console.ReadLine();
+            if (int.TryParse(sPort, out Port) && IPAddress.TryParse(sIdAddress, out IpAddress))
+            {
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("Данные успешно введены. Запускаю сервер.");
+                StartServer();
+            }
+            Console.Read();
         }
     }
 }
