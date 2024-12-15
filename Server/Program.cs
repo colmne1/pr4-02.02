@@ -5,6 +5,7 @@ using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 using System.Net;
+using System.IO;
 
 namespace Server
 {
@@ -21,6 +22,26 @@ namespace Server
             User user = null;
             user = Users.Find(x => x.login == login && x.password == password);
             return user != null;
+        }
+        public static List<string> GetDirectory(string src)
+        {
+            List<string> FolderFiles = new List<string>();
+            if (Directory.Exists(src))
+            {
+                string[] dirs = Directory.GetDirectories(src);
+                foreach (string dir in dirs)
+                {
+                    string NameDirectory = dir.Replace(src, "");
+                    FolderFiles.Add(NameDirectory + "/");
+                }
+                string[] files = Directory.GetFiles(src);
+                foreach (string file in files)
+                {
+                    string NameFile = file.Replace(src, "");
+                    FolderFiles.Add(NameFile);
+                }
+            }
+            return FolderFiles;
         }
     }
 }
